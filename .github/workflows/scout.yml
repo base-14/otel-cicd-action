@@ -1,0 +1,23 @@
+name: Export workflow to Scout
+
+on:
+  workflow_run:
+    workflows:
+      - "Build"
+    types: [completed]
+
+jobs:
+  otel-export-scout:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Export workflow to Scout
+        uses: corentinmusard/otel-cicd-action@v4
+        with:
+          otlpEndpoint: https://otel.play.base14.io/01k56met06asfewdaqw8z65jvn/otlp
+          tokenUrl: https://id.b14.dev/realms/oteldemo1/protocol/openid-connect/token
+          appName: ${{ secrets.SCOUT_APP_NAME }}
+          apiKey: ${{ secrets.SCOUT_API_KEY }}
+          audience: b14collector
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          runId: ${{ github.event.workflow_run.id }}

@@ -24,6 +24,7 @@ We provide sample code for popular platforms. If you feel one is missing, please
 | New Relic                   | [newrelic.yml](.github/workflows/newrelic.yml)   |
 | Honeycomb                   | [honeycomb.yml](.github/workflows/honeycomb.yml) |
 | Dash0                       | [dash0.yml](.github/workflows/dash0.yml)         |
+| Scout (OAuth2)              | [scout.yml](.github/workflows/scout.yml)         |
 
 ### On workflow_run event
 
@@ -93,6 +94,25 @@ permissions:
   checks: read # Optional. To read run annotations
 ```
 
+### OAuth2 Authentication (client_credentials)
+
+If your OTLP endpoint requires OAuth2 authentication, you can use the built-in client_credentials flow instead of static headers. The action will exchange the credentials for a bearer token and inject it as an `Authorization` header automatically.
+
+```yaml
+- name: Export workflow
+  uses: corentinmusard/otel-cicd-action@v4
+  with:
+    otlpEndpoint: https://otel.example.com/v1/traces
+    tokenUrl: https://auth.example.com/realms/myrealm/protocol/openid-connect/token
+    appName: ${{ secrets.OAUTH_CLIENT_ID }}
+    apiKey: ${{ secrets.OAUTH_CLIENT_SECRET }}
+    audience: my-collector
+    githubToken: ${{ secrets.GITHUB_TOKEN }}
+    runId: ${{ github.event.workflow_run.id }}
+```
+
+All four OAuth inputs (`tokenUrl`, `appName`, `apiKey`, `audience`) must be provided together. When present, the action fetches a token before exporting traces. The `otlpHeaders` input is optional and can still be used alongside OAuth to pass additional headers.
+
 ### Adding arbitrary resource attributes
 
 You can use `extraAttributes` to set any additional string resource attributes.
@@ -113,11 +133,15 @@ Attributes are splitted on `,` and then each key/value are splitted on the first
 | name            | description                                                                                                 | required | default                               | example                                                          |
 | --------------- | ----------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------- | ---------------------------------------------------------------- |
 | otlpEndpoint    | The destination endpoint to export OpenTelemetry traces to. It supports `https://`, `http://` and `grpc://` endpoints. | true     |                                       | `https://api.axiom.co/v1/traces`                                 |
-| otlpHeaders     | Headers to add to the OpenTelemetry exporter .                                                              | true     |                                       | `x-honeycomb-team=YOUR_API_KEY,x-honeycomb-dataset=YOUR_DATASET` |
+| otlpHeaders     | Headers to add to the OpenTelemetry exporter.                                                               | false    | `""`                                  | `x-honeycomb-team=YOUR_API_KEY,x-honeycomb-dataset=YOUR_DATASET` |
 | otelServiceName | OpenTelemetry service name                                                                                  | false    | `<The name of the exported workflow>` | `Build CI`                                                       |
 | githubToken     | The repository token with Workflow permissions. Required for private repos                                  | false    |                                       | `${{ secrets.GITHUB_TOKEN }}`                                    |
 | runId           | Workflow Run ID to Export                                                                                   | false    | env.GITHUB_RUN_ID                     | `${{ github.event.workflow_run.id }}`                            |
-| extraAttributes | Extra resource attributes to add to each span | false |  | extra.attribute=1,key2=value2 |
+| extraAttributes | Extra resource attributes to add to each span                                                               | false    |                                       | `extra.attribute=1,key2=value2`                                  |
+| tokenUrl        | OAuth2 token endpoint URL for client_credentials flow                                                       | false    | `""`                                  | `https://auth.example.com/realms/myrealm/protocol/openid-connect/token` |
+| appName         | OAuth2 client ID (application name)                                                                         | false    | `""`                                  | `${{ secrets.OAUTH_CLIENT_ID }}`                                 |
+| apiKey          | OAuth2 client secret (API key)                                                                              | false    | `""`                                  | `${{ secrets.OAUTH_CLIENT_SECRET }}`                             |
+| audience        | OAuth2 audience                                                                                             | false    | `""`                                  | `my-collector`                                                   |
 
 ### Action Outputs
 

@@ -11,6 +11,8 @@ import { replayOctokit } from "./replay";
 // Mocks should be declared before the module being tested is imported.
 jest.unstable_mockModule("@actions/core", () => core);
 jest.unstable_mockModule("@actions/github", () => github);
+const mockFetchAccessToken = jest.fn<() => Promise<string>>();
+jest.unstable_mockModule("./oauth", () => ({ fetchAccessToken: mockFetchAccessToken }));
 
 const token = process.env["GH_TOKEN"] ?? "";
 
@@ -132,5 +134,133 @@ describe("run", () => {
     expect(core.setFailed).toHaveBeenCalledTimes(1);
     expect(core.setFailed).toHaveBeenCalledWith(expect.any(Error));
     expect(core.setOutput).not.toHaveBeenCalled();
+  }, 10_000);
+});
+
+describe("run with OAuth", () => {
+  beforeEach(async () => {
+    const octokit = await replayOctokit("run", token);
+    github.getOctokit.mockReturnValue(octokit);
+
+    // biome-ignore lint/suspicious/noEmptyBlockStatements: suppress console output during tests
+    jest.spyOn(console, "dir").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    trace.disable();
+    core.setOutput.mockReset();
+    core.setFailed.mockReset();
+    core.getInput.mockReset();
+    mockFetchAccessToken.mockReset();
+    jest.restoreAllMocks();
+  });
+
+  it("should fetch OAuth token and run successfully", async () => {
+    process.env["GITHUB_REPOSITORY"] = "biomejs/biome";
+    mockFetchAccessToken.mockResolvedValueOnce("tok_oauth_test");
+
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case "otlpEndpoint":
+          return "";
+        case "otlpHeaders":
+          return "";
+        case "otelServiceName":
+          return "otel-cicd-action";
+        case "runId":
+          return "21487811823";
+        case "githubToken":
+          return token;
+        case "extraAttributes":
+          return "";
+        case "tokenUrl":
+          return "https://auth.example.com/oauth/token";
+        case "appName":
+          return "my-app";
+        case "apiKey":
+          return "my-secret";
+        case "audience":
+          return "https://api.example.com";
+        default:
+          return "";
+      }
+    });
+
+    await run();
+
+    expect(mockFetchAccessToken).toHaveBeenCalledWith({
+      tokenUrl: "https://auth.example.com/oauth/token",
+      clientId: "my-app",
+      clientSecret: "my-secret",
+      audience: "https://api.example.com",
+    });
+    expect(core.setFailed).not.toHaveBeenCalled();
+    expect(core.setOutput).toHaveBeenCalledWith("traceId", expect.any(String));
+  }, 10_000);
+
+  it("should skip OAuth when inputs are missing", async () => {
+    process.env["GITHUB_REPOSITORY"] = "biomejs/biome";
+
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case "otlpEndpoint":
+          return "";
+        case "otlpHeaders":
+          return "";
+        case "otelServiceName":
+          return "otel-cicd-action";
+        case "runId":
+          return "21487811823";
+        case "githubToken":
+          return token;
+        case "extraAttributes":
+          return "";
+        default:
+          return "";
+      }
+    });
+
+    await run();
+
+    expect(mockFetchAccessToken).not.toHaveBeenCalled();
+    expect(core.setFailed).not.toHaveBeenCalled();
+  }, 10_000);
+
+  it("should call setFailed when OAuth token fetch fails", async () => {
+    process.env["GITHUB_REPOSITORY"] = "biomejs/biome";
+    mockFetchAccessToken.mockRejectedValueOnce(new Error("OAuth token request failed: 401 Unauthorized"));
+
+    core.getInput.mockImplementation((name: string) => {
+      switch (name) {
+        case "otlpEndpoint":
+          return "";
+        case "otlpHeaders":
+          return "";
+        case "otelServiceName":
+          return "otel-cicd-action";
+        case "runId":
+          return "21487811823";
+        case "githubToken":
+          return token;
+        case "extraAttributes":
+          return "";
+        case "tokenUrl":
+          return "https://auth.example.com/oauth/token";
+        case "appName":
+          return "my-app";
+        case "apiKey":
+          return "my-secret";
+        case "audience":
+          return "https://api.example.com";
+        default:
+          return "";
+      }
+    });
+
+    await run();
+
+    expect(mockFetchAccessToken).toHaveBeenCalledTimes(1);
+    expect(core.setFailed).toHaveBeenCalledTimes(1);
+    expect(core.setFailed).toHaveBeenCalledWith(expect.any(Error));
   }, 10_000);
 });

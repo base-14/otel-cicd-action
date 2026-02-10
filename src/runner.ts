@@ -5,6 +5,7 @@ import type { Attributes } from "@opentelemetry/api";
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
 import { ATTR_SERVICE_INSTANCE_ID, ATTR_SERVICE_NAMESPACE } from "@opentelemetry/semantic-conventions/incubating";
 import { getJobsAnnotations, getPRsLabels, getWorkflowRun, listJobsForWorkflowRun } from "./github";
+import { fetchAccessToken } from "./oauth";
 import { traceWorkflowRun } from "./trace/workflow";
 import { createTracerProvider, stringToRecord } from "./tracer";
 
@@ -53,11 +54,23 @@ async function fetchGithub(token: string, runId: number) {
 async function run() {
   try {
     const otlpEndpoint = core.getInput("otlpEndpoint");
-    const otlpHeaders = core.getInput("otlpHeaders");
+    let otlpHeaders = core.getInput("otlpHeaders");
     const otelServiceName = core.getInput("otelServiceName") || process.env["OTEL_SERVICE_NAME"] || "";
     const runId = Number.parseInt(core.getInput("runId") || `${context.runId}`, 10);
     const extraAttributes = stringToRecord(core.getInput("extraAttributes"));
     const ghToken = core.getInput("githubToken") || process.env["GITHUB_TOKEN"] || "";
+
+    const tokenUrl = core.getInput("tokenUrl");
+    const appName = core.getInput("appName");
+    const apiKey = core.getInput("apiKey");
+    const audience = core.getInput("audience");
+
+    if (tokenUrl && appName && apiKey && audience) {
+      core.info("Fetching OAuth2 access token");
+      const accessToken = await fetchAccessToken({ tokenUrl, clientId: appName, clientSecret: apiKey, audience });
+      const authHeader = `Authorization=Bearer ${accessToken}`;
+      otlpHeaders = otlpHeaders ? `${authHeader},${otlpHeaders}` : authHeader;
+    }
 
     core.info("Use Github API to fetch workflow data");
     const { workflowRun, jobs, jobAnnotations, prLabels } = await fetchGithub(ghToken, runId);

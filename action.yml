@@ -12,7 +12,8 @@ inputs:
     required: true
   otlpHeaders:
     description: Network Headers for the destination endpoint to export OpenTelemetry traces to
-    required: true
+    required: false
+    default: ""
   otelServiceName:
     description: OpenTelemetry service name
     required: false
@@ -26,6 +27,22 @@ inputs:
   extraAttributes:
     description: Extra resource attributes to add to each span
     required: false
+  tokenUrl:
+    description: OAuth2 token endpoint URL for client_credentials flow
+    required: false
+    default: ""
+  appName:
+    description: OAuth2 client ID (application name) for client_credentials flow
+    required: false
+    default: ""
+  apiKey:
+    description: OAuth2 client secret (API key) for client_credentials flow
+    required: false
+    default: ""
+  audience:
+    description: OAuth2 audience for client_credentials flow
+    required: false
+    default: ""
 outputs:
   traceId:
     description: The OpenTelemetry Trace ID of the root span
