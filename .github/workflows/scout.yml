@@ -14,7 +14,7 @@ jobs:
       - name: Export workflow to Scout
         uses: ./
         with:
-          otlpEndpoint: https://otel.play.base14.io/01k56met06asfewdaqw8z65jvn/otlp
+          otlpEndpoint: https://otel.play.base14.io/01k56met06asfewdaqw8z65jvn/otlp/v1/traces
           tokenUrl: https://id.b14.dev/realms/oteldemo1/protocol/openid-connect/token
           appName: ${{ secrets.SCOUT_APP_NAME }}
           apiKey: ${{ secrets.SCOUT_API_KEY }}
