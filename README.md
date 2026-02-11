@@ -1,4 +1,4 @@
-# Open Telemetry CI/CD Action
+# Scout Open Telemetry CI/CD Action
 
 [![Unit Tests][ci-img]][ci]
 ![GitHub License][license-img]
