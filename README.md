@@ -35,9 +35,8 @@ jobs:
   otel-export:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
       - name: Export workflow
-        uses: ./
+        uses: base-14/otel-cicd-action@v1
         with:
           otlpEndpoint: https://otel.example.com/v1/traces
           otlpHeaders: ${{ secrets.OTLP_HEADERS }}
@@ -57,9 +56,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [build] # must run when all jobs are completed
     steps:
-      - uses: actions/checkout@v6
       - name: Export workflow
-        uses: ./
+        uses: base-14/otel-cicd-action@v1
         with:
           otlpEndpoint: https://otel.example.com/v1/traces
           otlpHeaders: ${{ secrets.OTLP_HEADERS }}
@@ -96,7 +94,7 @@ If your OTLP endpoint requires OAuth2 authentication, you can use the built-in c
 
 ```yaml
 - name: Export workflow
-  uses: ./
+  uses: base-14/otel-cicd-action@v1
   with:
     otlpEndpoint: https://otel.example.com/v1/traces
     tokenUrl: https://auth.example.com/realms/myrealm/protocol/openid-connect/token
@@ -116,7 +114,7 @@ Attributes are split on `,` and then each key/value is split on the first `=`.
 
 ```yaml
 - name: Export workflow
-  uses: ./
+  uses: base-14/otel-cicd-action@v1
   with:
     otlpEndpoint: https://otel.example.com/v1/traces
     githubToken: ${{ secrets.GITHUB_TOKEN }}
@@ -144,6 +142,6 @@ Attributes are split on `,` and then each key/value is split on the first `=`.
 | ------- | ------------------------------------------- |
 | traceId | The OpenTelemetry Trace ID of the root span |
 
-[ci-img]: https://github.com/corentinmusard/otel-cicd-action/actions/workflows/build.yml/badge.svg?branch=main
-[ci]: https://github.com/corentinmusard/otel-cicd-action/actions/workflows/build.yml?query=branch%3Amain
-[license-img]: https://img.shields.io/github/license/corentinmusard/otel-cicd-action
+[ci-img]: https://github.com/base-14/otel-cicd-action/actions/workflows/build.yml/badge.svg?branch=main
+[ci]: https://github.com/base-14/otel-cicd-action/actions/workflows/build.yml?query=branch%3Amain
+[license-img]: https://img.shields.io/github/license/base-14/otel-cicd-action
