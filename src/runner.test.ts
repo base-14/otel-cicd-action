@@ -3,6 +3,7 @@ import util, { type InspectOptions } from "node:util";
 import { jest } from "@jest/globals";
 import { RequestError } from "@octokit/request-error";
 import { trace } from "@opentelemetry/api";
+import { logs } from "@opentelemetry/api-logs";
 import * as core from "./__fixtures__/core";
 import * as github from "./__fixtures__/github";
 import type { Octokit } from "./github";
@@ -13,6 +14,11 @@ jest.unstable_mockModule("@actions/core", () => core);
 jest.unstable_mockModule("@actions/github", () => github);
 const mockFetchAccessToken = jest.fn<() => Promise<string>>();
 jest.unstable_mockModule("./oauth", () => ({ fetchAccessToken: mockFetchAccessToken }));
+const mockDownloadWorkflowLogs = jest.fn<() => Promise<Map<string, Map<number, string>>>>();
+jest.unstable_mockModule("./logs", () => ({
+  downloadWorkflowLogs: mockDownloadWorkflowLogs,
+  JOB_LOG_KEY: 0,
+}));
 
 const token = process.env["GH_TOKEN"] ?? "";
 
@@ -49,6 +55,7 @@ describe("run", () => {
     octokit = await replayOctokit("run", token);
 
     github.getOctokit.mockReturnValue(octokit);
+    mockDownloadWorkflowLogs.mockResolvedValue(new Map());
 
     core.getInput.mockImplementation((name: string) => {
       switch (name) {
@@ -64,6 +71,8 @@ describe("run", () => {
           return token;
         case "extraAttributes":
           return "extra.attribute=1,key2=value2";
+        case "stepLogsLevel":
+          return "failed";
         default:
           return "";
       }
@@ -82,6 +91,7 @@ describe("run", () => {
 
   afterEach(() => {
     trace.disable(); // Remove the global tracer provider
+    logs.disable(); // Remove the global logger provider
     output = "";
     core.setOutput.mockReset();
     core.setFailed.mockReset();
@@ -141,6 +151,7 @@ describe("run with OAuth", () => {
   beforeEach(async () => {
     const octokit = await replayOctokit("run", token);
     github.getOctokit.mockReturnValue(octokit);
+    mockDownloadWorkflowLogs.mockResolvedValue(new Map());
 
     // biome-ignore lint/suspicious/noEmptyBlockStatements: suppress console output during tests
     jest.spyOn(console, "dir").mockImplementation(() => {});
@@ -148,10 +159,12 @@ describe("run with OAuth", () => {
 
   afterEach(() => {
     trace.disable();
+    logs.disable();
     core.setOutput.mockReset();
     core.setFailed.mockReset();
     core.getInput.mockReset();
     mockFetchAccessToken.mockReset();
+    mockDownloadWorkflowLogs.mockReset();
     jest.restoreAllMocks();
   });
 
@@ -181,6 +194,8 @@ describe("run with OAuth", () => {
           return "my-secret";
         case "audience":
           return "https://api.example.com";
+        case "stepLogsLevel":
+          return "failed";
         default:
           return "";
       }
@@ -215,6 +230,8 @@ describe("run with OAuth", () => {
           return token;
         case "extraAttributes":
           return "";
+        case "stepLogsLevel":
+          return "failed";
         default:
           return "";
       }
@@ -252,6 +269,8 @@ describe("run with OAuth", () => {
           return "my-secret";
         case "audience":
           return "https://api.example.com";
+        case "stepLogsLevel":
+          return "failed";
         default:
           return "";
       }

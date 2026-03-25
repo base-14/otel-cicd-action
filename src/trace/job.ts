@@ -1,6 +1,7 @@
 import * as core from "@actions/core";
 import type { components } from "@octokit/openapi-types";
-import { type Attributes, SpanStatusCode, trace } from "@opentelemetry/api";
+import { type Attributes, context as otelContext, SpanStatusCode, trace } from "@opentelemetry/api";
+import { logs, SeverityNumber } from "@opentelemetry/api-logs";
 import {
   ATTR_CICD_PIPELINE_TASK_NAME,
   ATTR_CICD_PIPELINE_TASK_RUN_ID,
@@ -18,9 +19,15 @@ import {
   CICD_PIPELINE_TASK_TYPE_VALUE_DEPLOY,
   CICD_PIPELINE_TASK_TYPE_VALUE_TEST,
 } from "@opentelemetry/semantic-conventions/incubating";
+import { JOB_LOG_KEY } from "../logs";
 import { traceStep } from "./step";
 
-function traceJob(job: components["schemas"]["job"], annotations?: components["schemas"]["check-annotation"][]) {
+function traceJob(
+  job: components["schemas"]["job"],
+  annotations: components["schemas"]["check-annotation"][] | undefined,
+  stepLogsLevel: string,
+  jobStepLogs: Map<number, string> | undefined
+) {
   const tracer = trace.getTracer("otel-cicd-action");
 
   if (!job.completed_at) {
@@ -39,12 +46,75 @@ function traceJob(job: components["schemas"]["job"], annotations?: components["s
     const code = job.conclusion === "failure" ? SpanStatusCode.ERROR : SpanStatusCode.OK;
     span.setStatus({ code });
 
-    for (const step of job.steps ?? []) {
-      traceStep(step);
+    const emittedStepLog = traceJobSteps(job, jobStepLogs, stepLogsLevel);
+
+    // If per-step logs weren't available but we have a full job log (from per-job fallback),
+    // emit it once at the job span level
+    if (!emittedStepLog) {
+      emitJobLevelLog(job, jobStepLogs, stepLogsLevel);
     }
 
     // Some skipped and post jobs return completed_at dates that are older than started_at
     span.end(new Date(Math.max(startTime.getTime(), completedTime.getTime())));
+  });
+}
+
+function traceJobSteps(
+  job: components["schemas"]["job"],
+  jobStepLogs: Map<number, string> | undefined,
+  stepLogsLevel: string
+): boolean {
+  let emittedStepLog = false;
+
+  for (const step of job.steps ?? []) {
+    let logContent: string | undefined;
+
+    if (jobStepLogs && stepLogsLevel !== "off") {
+      const shouldInclude = stepLogsLevel === "all" || (stepLogsLevel === "failed" && step.conclusion === "failure");
+
+      if (shouldInclude) {
+        logContent = jobStepLogs.get(step.number);
+        if (logContent) {
+          emittedStepLog = true;
+        }
+      }
+    }
+
+    traceStep({ step, jobName: job.name, jobHtmlUrl: job.html_url ?? undefined, logContent });
+  }
+
+  return emittedStepLog;
+}
+
+function emitJobLevelLog(
+  job: components["schemas"]["job"],
+  jobStepLogs: Map<number, string> | undefined,
+  stepLogsLevel: string
+) {
+  if (!jobStepLogs?.has(JOB_LOG_KEY) || stepLogsLevel === "off") {
+    return;
+  }
+
+  const shouldInclude = stepLogsLevel === "all" || (stepLogsLevel === "failed" && job.conclusion === "failure");
+  if (!shouldInclude) {
+    return;
+  }
+
+  const logger = logs.getLogger("otel-cicd-action");
+  const severityNumber = job.conclusion === "failure" ? SeverityNumber.ERROR : SeverityNumber.INFO;
+  const severityText = job.conclusion === "failure" ? "ERROR" : "INFO";
+
+  logger.emit({
+    severityNumber,
+    severityText,
+    body: jobStepLogs.get(JOB_LOG_KEY),
+    timestamp: new Date(job.started_at),
+    attributes: {
+      "github.job.name": job.name,
+      "github.job.conclusion": job.conclusion ?? undefined,
+      "github.job.html_url": job.html_url ?? undefined,
+    },
+    context: otelContext.active(),
   });
 }
 
