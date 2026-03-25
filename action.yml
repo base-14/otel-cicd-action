@@ -43,6 +43,18 @@ inputs:
     description: OAuth2 audience for client_credentials flow
     required: false
     default: ""
+  otlpLogsEndpoint:
+    description: The destination endpoint to export OpenTelemetry logs to. Defaults to otlpEndpoint if not set.
+    required: false
+    default: ""
+  stepLogsLevel:
+    description: >
+      Controls which steps' logs are collected and sent as OTel log records.
+      "failed" (default) collects logs only for failed steps.
+      "all" collects logs for all completed steps.
+      "off" disables log collection entirely.
+    required: false
+    default: "failed"
 outputs:
   traceId:
     description: The OpenTelemetry Trace ID of the root span

@@ -2,16 +2,19 @@ interface OAuthConfig {
   tokenUrl: string;
   clientId: string;
   clientSecret: string;
-  audience: string;
+  audience?: string | undefined;
 }
 
 async function fetchAccessToken(config: OAuthConfig): Promise<string> {
-  const body = new URLSearchParams({
+  const params: Record<string, string> = {
     grant_type: "client_credentials",
     client_id: config.clientId,
     client_secret: config.clientSecret,
-    audience: config.audience,
-  });
+  };
+  if (config.audience) {
+    params["audience"] = config.audience;
+  }
+  const body = new URLSearchParams(params);
 
   const response = await fetch(config.tokenUrl, {
     method: "POST",

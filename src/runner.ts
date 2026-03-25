@@ -2,9 +2,12 @@ import * as core from "@actions/core";
 import { context, getOctokit } from "@actions/github";
 import type { RequestError } from "@octokit/request-error";
 import type { Attributes } from "@opentelemetry/api";
+import { logs } from "@opentelemetry/api-logs";
 import { ATTR_SERVICE_NAME, ATTR_SERVICE_VERSION } from "@opentelemetry/semantic-conventions";
 import { ATTR_SERVICE_INSTANCE_ID, ATTR_SERVICE_NAMESPACE } from "@opentelemetry/semantic-conventions/incubating";
 import { getJobsAnnotations, getPRsLabels, getWorkflowRun, listJobsForWorkflowRun } from "./github";
+import { createLoggerProvider } from "./logger";
+import { downloadWorkflowLogs, type StepLogs } from "./logs";
 import { fetchAccessToken } from "./oauth";
 import { traceWorkflowRun } from "./trace/workflow";
 import { createTracerProvider, stringToRecord } from "./tracer";
@@ -60,20 +63,35 @@ async function run() {
     const extraAttributes = stringToRecord(core.getInput("extraAttributes"));
     const ghToken = core.getInput("githubToken") || process.env["GITHUB_TOKEN"] || "";
 
+    const otlpLogsEndpoint = core.getInput("otlpLogsEndpoint") || otlpEndpoint;
+    const stepLogsLevel = core.getInput("stepLogsLevel") || "failed";
+
     const tokenUrl = core.getInput("tokenUrl");
     const appName = core.getInput("appName");
     const apiKey = core.getInput("apiKey");
     const audience = core.getInput("audience");
 
-    if (tokenUrl && appName && apiKey && audience) {
+    if (tokenUrl && appName && apiKey) {
       core.info("Fetching OAuth2 access token");
-      const accessToken = await fetchAccessToken({ tokenUrl, clientId: appName, clientSecret: apiKey, audience });
+      const accessToken = await fetchAccessToken({
+        tokenUrl,
+        clientId: appName,
+        clientSecret: apiKey,
+        audience: audience || undefined,
+      });
       const authHeader = `Authorization=Bearer ${accessToken}`;
       otlpHeaders = otlpHeaders ? `${authHeader},${otlpHeaders}` : authHeader;
     }
 
     core.info("Use Github API to fetch workflow data");
     const { workflowRun, jobs, jobAnnotations, prLabels } = await fetchGithub(ghToken, runId);
+
+    let stepLogs: StepLogs = new Map();
+    if (stepLogsLevel !== "off") {
+      core.info("Download workflow run logs");
+      const octokit = getOctokit(ghToken);
+      stepLogs = await downloadWorkflowLogs(context, octokit, runId, jobs);
+    }
 
     core.info(`Create tracer provider for ${otlpEndpoint}`);
     const attributes: Attributes = {
@@ -89,9 +107,11 @@ async function run() {
       ...extraAttributes,
     };
     const provider = createTracerProvider(otlpEndpoint, otlpHeaders, attributes);
+    const loggerProvider = createLoggerProvider(otlpLogsEndpoint, otlpHeaders, attributes);
+    logs.setGlobalLoggerProvider(loggerProvider);
 
     core.info(`Trace workflow run for ${runId} and export to ${otlpEndpoint}`);
-    const traceId = traceWorkflowRun(workflowRun, jobs, jobAnnotations, prLabels);
+    const traceId = traceWorkflowRun(workflowRun, jobs, jobAnnotations, prLabels, stepLogsLevel, stepLogs);
 
     core.setOutput("traceId", traceId);
     core.info(`traceId: ${traceId}`);
@@ -99,7 +119,11 @@ async function run() {
     core.info("Flush and shutdown tracer provider");
     await provider.forceFlush();
     await provider.shutdown();
-    core.info("Provider shutdown");
+
+    core.info("Flush and shutdown logger provider");
+    await loggerProvider.forceFlush();
+    await loggerProvider.shutdown();
+    core.info("Providers shutdown");
   } catch (error) {
     const message = error instanceof Error ? error : JSON.stringify(error);
     core.setFailed(message);

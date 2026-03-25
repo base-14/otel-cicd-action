@@ -18,13 +18,16 @@ import {
   CICD_PIPELINE_RUN_STATE_VALUE_FINALIZING,
   CICD_PIPELINE_RUN_STATE_VALUE_PENDING,
 } from "@opentelemetry/semantic-conventions/incubating";
+import type { StepLogs } from "../logs";
 import { traceJob } from "./job";
 
 function traceWorkflowRun(
   workflowRun: components["schemas"]["workflow-run"],
   jobs: components["schemas"]["job"][],
   jobAnnotations: Record<number, components["schemas"]["check-annotation"][]>,
-  prLabels: Record<number, string[]>
+  prLabels: Record<number, string[]>,
+  stepLogsLevel: string,
+  stepLogs: StepLogs
 ) {
   const tracer = trace.getTracer("otel-cicd-action");
 
@@ -46,7 +49,7 @@ function traceWorkflowRun(
       }
 
       for (const job of jobs) {
-        traceJob(job, jobAnnotations[job.id]);
+        traceJob(job, jobAnnotations[job.id], stepLogsLevel, stepLogs.get(job.name));
       }
 
       rootSpan.end(new Date(workflowRun.updated_at));
