@@ -3,7 +3,7 @@
 [![Unit Tests][ci-img]][ci]
 ![GitHub License][license-img]
 
-This action exports Github CI/CD workflows to any endpoint compatible with OpenTelemetry.
+This action exports Github CI/CD workflows to any endpoint compatible with OpenTelemetry — including both traces and logs.
 
 This is a fork of [otel-export-trace-action](https://github.com/inception-health/otel-export-trace-action) with more features and better support.
 
@@ -36,9 +36,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Export workflow
-        uses: base-14/otel-cicd-action@v1
+        uses: base-14/otel-cicd-action@v2
         with:
           otlpEndpoint: https://otel.example.com/v1/traces
+          otlpLogsEndpoint: https://otel.example.com/v1/logs
           otlpHeaders: ${{ secrets.OTLP_HEADERS }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
           runId: ${{ github.event.workflow_run.id }}
@@ -57,9 +58,10 @@ jobs:
     needs: [build] # must run when all jobs are completed
     steps:
       - name: Export workflow
-        uses: base-14/otel-cicd-action@v1
+        uses: base-14/otel-cicd-action@v2
         with:
           otlpEndpoint: https://otel.example.com/v1/traces
+          otlpLogsEndpoint: https://otel.example.com/v1/logs
           otlpHeaders: ${{ secrets.OTLP_HEADERS }}
           githubToken: ${{ secrets.GITHUB_TOKEN }}
 ```
@@ -94,9 +96,10 @@ If your OTLP endpoint requires OAuth2 authentication, you can use the built-in c
 
 ```yaml
 - name: Export workflow
-  uses: base-14/otel-cicd-action@v1
+  uses: base-14/otel-cicd-action@v2
   with:
     otlpEndpoint: https://otel.example.com/v1/traces
+    otlpLogsEndpoint: https://otel.example.com/v1/logs
     tokenUrl: https://auth.example.com/realms/myrealm/protocol/openid-connect/token
     appName: ${{ secrets.OAUTH_CLIENT_ID }}
     apiKey: ${{ secrets.OAUTH_CLIENT_SECRET }}
@@ -105,7 +108,7 @@ If your OTLP endpoint requires OAuth2 authentication, you can use the built-in c
     runId: ${{ github.event.workflow_run.id }}
 ```
 
-All four OAuth inputs (`tokenUrl`, `appName`, `apiKey`, `audience`) must be provided together. When present, the action fetches a token before exporting traces. The `otlpHeaders` input is optional and can still be used alongside OAuth to pass additional headers.
+`tokenUrl`, `appName`, and `apiKey` must be provided together. `audience` is optional. When present, the action fetches a token before exporting traces and logs. The `otlpHeaders` input is optional and can still be used alongside OAuth to pass additional headers.
 
 ### Adding arbitrary resource attributes
 
@@ -114,7 +117,7 @@ Attributes are split on `,` and then each key/value is split on the first `=`.
 
 ```yaml
 - name: Export workflow
-  uses: base-14/otel-cicd-action@v1
+  uses: base-14/otel-cicd-action@v2
   with:
     otlpEndpoint: https://otel.example.com/v1/traces
     githubToken: ${{ secrets.GITHUB_TOKEN }}
@@ -123,18 +126,20 @@ Attributes are split on `,` and then each key/value is split on the first `=`.
 
 ### Action Inputs
 
-| name            | description                                                                                                          | required | default                               | example                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------- | ------------------------------------------------------------------------ |
-| otlpEndpoint    | The destination endpoint to export OpenTelemetry traces to. Supports `https://`, `http://` and `grpc://` endpoints.  | true     |                                       | `https://otel.example.com/v1/traces`                                     |
-| otlpHeaders     | Headers to add to the OpenTelemetry exporter.                                                                        | false    | `""`                                  | `Authorization=Bearer token123`                                          |
-| otelServiceName | OpenTelemetry service name                                                                                           | false    | `<The name of the exported workflow>` | `my-repo-CI`                                                             |
-| githubToken     | The repository token with Workflow permissions. Required for private repos                                           | false    |                                       | `${{ secrets.GITHUB_TOKEN }}`                                            |
-| runId           | Workflow Run ID to Export                                                                                            | false    | env.GITHUB_RUN_ID                     | `${{ github.event.workflow_run.id }}`                                    |
-| extraAttributes | Extra resource attributes to add to each span                                                                        | false    |                                       | `extra.attribute=1,key2=value2`                                          |
-| tokenUrl        | OAuth2 token endpoint URL for client_credentials flow                                                                | false    | `""`                                  | `https://auth.example.com/realms/myrealm/protocol/openid-connect/token` |
-| appName         | OAuth2 client ID (application name)                                                                                  | false    | `""`                                  | `${{ secrets.OAUTH_CLIENT_ID }}`                                         |
-| apiKey          | OAuth2 client secret (API key)                                                                                       | false    | `""`                                  | `${{ secrets.OAUTH_CLIENT_SECRET }}`                                     |
-| audience        | OAuth2 audience                                                                                                      | false    | `""`                                  | `my-collector`                                                           |
+| name             | description                                                                                                          | required | default                               | example                                                                  |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------- | ------------------------------------------------------------------------ |
+| otlpEndpoint     | The destination endpoint to export OpenTelemetry traces to. Supports `https://`, `http://` and `grpc://` endpoints.  | true     |                                       | `https://otel.example.com/v1/traces`                                     |
+| otlpLogsEndpoint | The destination endpoint to export OpenTelemetry logs to. Defaults to `otlpEndpoint` if not set.                     | false    | `""`                                  | `https://otel.example.com/v1/logs`                                       |
+| otlpHeaders      | Headers to add to the OpenTelemetry exporter.                                                                        | false    | `""`                                  | `Authorization=Bearer token123`                                          |
+| otelServiceName  | OpenTelemetry service name                                                                                           | false    | `<The name of the exported workflow>` | `my-repo-CI`                                                             |
+| githubToken      | The repository token with Workflow permissions. Required for private repos                                           | false    |                                       | `${{ secrets.GITHUB_TOKEN }}`                                            |
+| runId            | Workflow Run ID to Export                                                                                            | false    | env.GITHUB_RUN_ID                     | `${{ github.event.workflow_run.id }}`                                    |
+| extraAttributes  | Extra resource attributes to add to each span                                                                        | false    |                                       | `extra.attribute=1,key2=value2`                                          |
+| stepLogsLevel    | Which steps' logs to collect: `"failed"` (default), `"all"`, or `"off"`                                              | false    | `"failed"`                            | `all`                                                                    |
+| tokenUrl         | OAuth2 token endpoint URL for client_credentials flow                                                                | false    | `""`                                  | `https://auth.example.com/realms/myrealm/protocol/openid-connect/token` |
+| appName          | OAuth2 client ID (application name)                                                                                  | false    | `""`                                  | `${{ secrets.OAUTH_CLIENT_ID }}`                                         |
+| apiKey           | OAuth2 client secret (API key)                                                                                       | false    | `""`                                  | `${{ secrets.OAUTH_CLIENT_SECRET }}`                                     |
+| audience         | OAuth2 audience (optional)                                                                                           | false    | `""`                                  | `my-collector`                                                           |
 
 ### Action Outputs
 
